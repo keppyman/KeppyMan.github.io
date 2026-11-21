@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Cecil Kitty Race</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    body {
+      background-color: #eef4f9;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      color: #1e3a5f;
+      overflow: hidden;
+      touch-action: manipulation;
+    }
+
+    .game-wrapper {
+      width: 100%;
+      max-width: 820px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .header {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      padding: 0 4px;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      font-weight: 800;
+      color: #1e3a5f;
+      letter-spacing: -0.5px;
+    }
+
+    .scoreboard {
+      display: flex;
+      gap: 16px;
+      font-size: 1.05rem;
+      font-weight: 700;
+      background: #ffffff;
+      padding: 8px 16px;
+      border-radius: 20px;
+      border: 2px solid #bdd5ea;
+      box-shadow: 0 2px 6px rgba(30, 58, 95, 0.08);
+    }
+
+    .score-label {
+      color: #5c7fa3;
+      font-weight: 600;
+      margin-right: 4px;
+    }
+
+    .canvas-container {
+      position: relative;
+      width: 100%;
+      border-radius: 16px;
+      overflow: hidden;
+      border: 4px solid #2b547e;
+      box-shadow: 0 10px 25px rgba(30, 58, 95, 0.15);
+      background: #fdfbf7;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      cursor: pointer;
+    }
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(255, 255, 255, 0.84);
+      backdrop-filter: blur(2px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 20px;
+      transition: opacity 0.2s ease;
+    }
+
+    .overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .overlay h2 {
+      font-size: 2rem;
+      color: #1e3a5f;
+      margin-bottom: 8px;
+    }
+
+    .overlay p {
+      font-size: 1.05rem;
+      color: #4a6b8c;
+      margin-bottom: 20px;
+      max-width: 440px;
+      line-height: 1.4;
+    }
+
+    .btn {
+      background-color: #2b547e;
+      color: #ffffff;
+      border: none;
+      padding: 12px 32px;
+      font-size: 1.15rem;
+      font-weight: 700;
+      border-radius: 30px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(43, 84, 126, 0.3);
+      transition: transform 0.1s ease, background-color 0.2s ease;
+    }
+
+    .btn:hover {
+      background-color: #1e3a5f;
+      transform: translateY(-2px);
+    }
+
+    .btn:active {
+      transform: translateY(0);
+    }
+
+    .controls-hint {
+      margin-top: 12px;
+      font-size: 0.9rem;
+      color: #5c7fa3;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="game-wrapper">
+    <div class="header">
+      <h1>🐾 Cecil Kitty Race</h1>
+      <div class="scoreboard">
+        <div><span class="score-label">SCORE</span><span id="scoreDisplay">0</span></div>
+        <div><span class="score-label">BEST</span><span id="bestDisplay">0</span></div>
+      </div>
+    </div>
+
+    <div class="canvas-container">
+      <canvas id="gameCanvas" width="800" height="340"></canvas>
+
+      <div class="overlay" id="startOverlay">
+        <h2>Cecil Kitty Race</h2>
+        <p>Help Cecil zoom through the house! Press <strong>Space</strong> or <strong>Tap</strong> to leap over shoes, cookies, spatulas, and chairs—press twice for a super <strong>Double Jump</strong>!</p>
+        <button class="btn" id="startBtn">Start Running</button>
+      </div>
+
+      <div class="overlay hidden" id="gameOverOverlay">
+        <h2>Oops! Tripped!</h2>
+        <p id="finalScoreText">Score: 0</p>
+        <button class="btn" id="restartBtn">Play Again</button>
+      </div>
+    </div>
+
+    <div class="controls-hint">
+      Press <strong>Spacebar</strong> or <strong>Tap Screen</strong> to Jump • Press Twice to Double Jump
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreDisplay = document.getElementById('scoreDisplay');
+    const bestDisplay = document.getElementById('bestDisplay');
+    const startOverlay = document.getElementById('startOverlay');
+    const gameOverOverlay = document.getElementById('gameOverOverlay');
+    const finalScoreText = document.getElementById('finalScoreText');
+    const startBtn = document.getElementById('startBtn');
+    const restartBtn = document.getElementById('restartBtn');
+
+    // Faster speed & higher jump physics
+    const FLOOR_Y = 268;
+    const GRAVITY = 0.64;
+    const JUMP_FORCE = -13.8;
+    const DOUBLE_JUMP_FORCE = -12.4;
+    const BASE_SPEED = 6.6;
+    const MAX_SPEED = 12.8;
+
+    // Game state
+    let gameState = 'START';
+    let speed = BASE_SPEED;
+    let score = 0;
+    let bestScore = parseInt(localStorage.getItem('cecilKittyBest') || '0', 10);
+    let frameCount = 0;
+    let floorOffset = 0;
+    let decorOffset = 0;
+    let rugOffset = 0;
+    let nextSpawnTimer = 75;
+
+    bestDisplay.textContent = bestScore;
+
+    // Cecil the Tuxedo Cat
+    const cecil = {
+      x: 95,
+      y: FLOOR_Y - 46,
+      width: 48,
+      height: 46,
+      vy: 0,
+      jumpsUsed: 0,
+      maxJumps: 2,
+      legPhase: 0,
+
+      reset() {
+        this.y = FLOOR_Y - this.height;
+        this.vy = 0;
+        this.jumpsUsed = 0;
+        this.legPhase = 0;
+      },
+
+      jump() {
+        if (this.jumpsUsed < this.maxJumps) {
+          this.vy = this.jumpsUsed === 0 ? JUMP_FORCE : DOUBLE_JUMP_FORCE;
+          this.jumpsUsed++;
+        }
+      },
+
+      update() {
+        this.vy += GRAVITY;
+        this.y += this.vy;
+
+        if (this.y >= FLOOR_Y - this.height) {
+          this.y = FLOOR_Y - this.height;
+          this.vy = 0;
+          this.jumpsUsed = 0;
+        }
+
+        if (this.jumpsUsed === 0) {
+          this.legPhase += speed * 0.065;
+        }
+      },
+
+      draw() {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+
+        const isJumping = this.jumpsUsed > 0;
+        const swing = isJumping ? 0.5 : Math.sin(this.legPhase) * 6.5;
+
+        // Swishing black tail
+        ctx.strokeStyle = '#18181b';
+        ctx.lineWidth = 6;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(6, 26);
+        const tailWave = Math.sin(frameCount * 0.16) * 5;
+        ctx.quadraticCurveTo(-12, 12 + tailWave, -6, 2 + tailWave);
+        ctx.stroke();
+
+        // White tail tip
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.moveTo(-7, 6 + tailWave);
+        ctx.lineTo(-6, 2 + tailWave);
+        ctx.stroke();
+
+        // Back & front legs
+        this.drawLeg(12 - swing, 34, isJumping ? -3 : 0);
+        this.drawLeg(34 + swing, 34, isJumping ? -4 : 0);
+
+        // Main black body
+        ctx.fillStyle = '#18181b';
+        ctx.beginPath();
+        ctx.roundRect(6, 18, 36, 22, 10);
+        ctx.fill();
+
+        // White tuxedo chest bib
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.ellipse(38, 28, 6, 9, 0.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Blue collar with silver tag
+        ctx.fillStyle = '#2563eb';
+        ctx.fillRect(28, 17, 13, 4);
+        ctx.fillStyle = '#e2e8f0';
+        ctx.beginPath();
+        ctx.arc(38, 23, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Head
+        ctx.fillStyle = '#18181b';
+        ctx.beginPath();
+        ctx.arc(36, 13, 13, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Ears
+        ctx.beginPath();
+        ctx.moveTo(26, 5);
+        ctx.lineTo(28, -5);
+        ctx.lineTo(35, 3);
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(37, 3);
+        ctx.lineTo(44, -5);
+        ctx.lineTo(46, 6);
+        ctx.fill();
+
+        // Inner pink ear
+        ctx.fillStyle = '#f472b6';
+        ctx.beginPath();
+        ctx.moveTo(28, 4);
+        ctx.lineTo(29, -2);
+        ctx.lineTo(33, 3);
+        ctx.fill();
+
+        // White tuxedo face markings
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.ellipse(41, 17, 7, 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(38, 8);
+        ctx.lineTo(35, 16);
+        ctx.lineTo(42, 16);
+        ctx.fill();
+
+        // Green-gold cat eye
+        ctx.fillStyle = '#fde047';
+        ctx.beginPath();
+        ctx.arc(41, 11, 2.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#09090b';
+        ctx.beginPath();
+        ctx.ellipse(41.5, 11, 1.1, 2.2, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Pink nose
+        ctx.fillStyle = '#fb7185';
+        ctx.beginPath();
+        ctx.arc(47, 15, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Whiskers
+        ctx.strokeStyle = '#cbd5e1';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(45, 16);
+        ctx.lineTo(54, 14);
+        ctx.moveTo(45, 18);
+        ctx.lineTo(54, 19);
+        ctx.stroke();
+
+        ctx.restore();
+      },
+
+      drawLeg(x, y, lift) {
+        ctx.fillStyle = '#18181b';
+        ctx.beginPath();
+        ctx.roundRect(x, y + lift, 7, 10, 3);
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.roundRect(x, y + 7 + lift, 8, 5, 2.5);
+        ctx.fill();
+      }
+    };
+
+    // Obstacles array
+    let obstacles = [];
+
+    function spawnObstacle() {
+      const pool = score < 65 ? ['shoe', 'cookie', 'spatula'] : ['shoe', 'cookie', 'spatula', 'chair'];
+      const type = pool[Math.floor(Math.random() * pool.length)];
+
+      if (type === 'shoe') {
+        obstacles.push({
